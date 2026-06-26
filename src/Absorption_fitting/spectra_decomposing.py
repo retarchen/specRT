@@ -6,18 +6,74 @@ from astropy.coordinates import SkyCoord
 from scipy.signal import find_peaks, peak_widths
 import itertools
 import scipy.stats as stats
-from scipy.integrate import trapz
 from scipy.signal import savgol_filter
-from .Gaussian_fitting import GaussianFitting as Gf  
-import pandas as pd
-import os
 from itertools import product
-from scipy.interpolate import interp1d
+from gaussFitSpec import fit_spectrum
+from gaussFitSpec.fitting import gaussian, multi_gaussian
+from .spectra_decomposing_io import (
+    load_six_column_spectrum,
+    validate_absorption_input,
+    write_table_outputs,
+)
+from .spectra_decomposing_plotting import create_legacy_axes, plot_fit_panels
+from .spectra_decomposing_utils import align_spectra_grids, filter_positive_error_rows
 
-linestyle_plot=['--','dotted','-.','solid','--','dotted','-.','solid']
-#datapathbase='/d/bip5/hchen'
+
+class _GaussianFitSpecAdapter:
+    """Small bridge from the old stateful API to ``gaussFitSpec.fit_spectrum``."""
+
+    def __init__(self, x, y, y_err):
+        self.x = x
+        self.y = y
+        self.y_err = y_err
+        self.CF_limit = 0.97
+        self.x_peak = []
+        self.fit_mode = "BIC"
+        self.nGaussianMax = 8
+        self.bic_weight = 10
+        self.num_cold = 0
+        self.last_result = None
+
+    @staticmethod
+    def gaussian_func(x, *params):
+        """Evaluate one Gaussian component using ``gaussFitSpec``."""
+        return gaussian(x, *params)
+
+    def gaussian_func_multi(self, x, *gausf):
+        """Evaluate summed Gaussian components using ``gaussFitSpec``."""
+        return multi_gaussian(x, *gausf)
+
+    def fitting(self):
+        """Fit with ``gaussFitSpec`` and return legacy ``(params, errors)``."""
+        method = "f_test" if self.fit_mode.lower() == "f_test" else "bic"
+        fit_kwargs = {
+            "name": "absorption",
+            "method": method,
+            "max_components": int(self.nGaussianMax),
+            "f_test_alpha": max(1.0 - float(self.CF_limit), 1.0e-4),
+        }
+        if len(self.x_peak) > 0:
+            fit_kwargs["initial_centers"] = list(self.x_peak)
+        elif self.num_cold > 0:
+            fit_kwargs["fixed_n_components"] = int(self.num_cold)
+
+        self.last_result = fit_spectrum(self.x, self.y, self.y_err, **fit_kwargs)
+        popt = np.asarray(self.last_result.parameters, dtype=float)
+        covariance = self.last_result.covariance
+        if covariance is None or np.ndim(covariance) != 2:
+            pcov = np.full_like(popt, np.nan, dtype=float)
+        else:
+            diagonal = np.diag(covariance)
+            pcov = np.where(diagonal >= 0, np.sqrt(diagonal), np.nan)
+        return popt, pcov
+
 
 class SpectraDecomposing:
+    """Legacy radiative-transfer decomposition workflow."""
+
+    load_six_column_spectrum = staticmethod(load_six_column_spectrum)
+    create_legacy_axes = staticmethod(create_legacy_axes)
+
     def __init__(self, x,y,y_err,xemi,yemi,yemi_err):
         self.x = x
         self.y = y
@@ -45,6 +101,15 @@ class SpectraDecomposing:
         self.datapath='./'
         self.renew=False
         self.align_data=False
+
+    def _prepare_inputs(self):
+        """Filter invalid rows, validate absorption format, and align grids if needed."""
+        x, y, yerr = filter_positive_error_rows(self.x, np.copy(self.y), self.y_err)
+        xemi, yemi, yemi_err = filter_positive_error_rows(self.xemi, self.yemi, self.yemi_err)
+        validate_absorption_input(y, yerr)
+        if self.align_data:
+            x, y, yerr, xemi, yemi, yemi_err = align_spectra_grids(x, y, yerr, xemi, yemi, yemi_err)
+        return x, y, yerr, xemi, yemi, yemi_err
         
     @staticmethod
     def parse_coords(coord_string):
@@ -101,16 +166,13 @@ class SpectraDecomposing:
         
         
     def gaussian_func_multi(self,x, *gausf):
-        fun=np.zeros(len(x))
-        for i in range(int(len(gausf)/3)):
-            j=i*3
-            fun+= self.gaussian_func(x,*gausf[j:j+3])
-        return fun
+        """Evaluate the sum of Gaussian components via ``gaussFitSpec``."""
+        return multi_gaussian(x, *gausf)
     
     @staticmethod
     def gaussian_func(x, *params):
-        a,mu, sigma = params
-        return a * np.exp(-(x - mu)**2 / (2 * sigma**2))
+        """Evaluate one Gaussian component via ``gaussFitSpec``."""
+        return gaussian(x, *params)
 
     @staticmethod
     def F_test(x,y_0, y_fit1, y_fit2, sigma_rms, x_1, x_2):
@@ -142,26 +204,8 @@ class SpectraDecomposing:
         return x_max - x_min
 
     def Gaussian_fit(self):
-  #  def Gaussian_fit(x,y,yerr,xemi,yemi,yemi_err,peak_abs=[],peak_emi=[],F=[0,0.5,1],selfabs=False,
-  #                          C_Flim=0.97,Tsmin=9,iteration_max=7,fit_mode='F_test',v_sh=4.):
-        x,y,yerr,xemi,yemi,yemi_err=self.x,np.copy(self.y),self.y_err,self.xemi,self.yemi,self.yemi_err
-        p=np.argwhere(yerr>0).flatten()
-        x,y,yerr=x[p],y[p],yerr[p]
-        p=np.argwhere(yemi_err>0).flatten()
-        xemi,yemi,yemi_err=xemi[p],yemi[p],yemi_err[p]
-        
-        if self.align_data:
-            common_x = np.linspace(max(xemi.min(), x.min()), min(xemi.max(), x.max()), min(len(xemi), len(x)))
-            interp_emi = interp1d(xemi, yemi, kind='linear', fill_value="extrapolate")
-            yemi = interp_emi(common_x)
-            interp_emi = interp1d(xemi, yemi_err, kind='linear', fill_value="extrapolate")
-            yemi_err = interp_emi(common_x)
-            interp_abs = interp1d(x, y, kind='linear', fill_value="extrapolate")
-            y= interp_abs(common_x)
-            interp_abs = interp1d(x, yerr, kind='linear', fill_value="extrapolate")
-            yerr= interp_abs(common_x)
-            x=common_x
-            xemi=common_x
+        """Run the full absorption plus emission decomposition workflow."""
+        x, y, yerr, xemi, yemi, yemi_err = self._prepare_inputs()
 
         peak_emi=self.peak_emi
         F=self.F
@@ -176,13 +220,12 @@ class SpectraDecomposing:
         ynew = convolve(ynew, g)
         
         print('start absorption fitting')
-        gf=Gf(x,ynew,yerr)
+        gf=_GaussianFitSpecAdapter(x,ynew,yerr)
         gf.x_peak=self.peak_abs
         gf.bic_weight=self.bic_weight
         gf.num_cold=self.num_cold
         popt_,pcov_=gf.fitting()
 
-       # popt_,pcov_=Gf.fitting(x,ynew,yerr,x_peak=self.peak_abs)
         #print(popt_[1::3])
         if y.max()>=1.:
             print('Satuated')
@@ -191,13 +234,12 @@ class SpectraDecomposing:
             #y=y/y.max()-np.exp(-3)
         y=-np.log(1-y)
         
-        gf=Gf(x,y,yerr)
+        gf=_GaussianFitSpecAdapter(x,y,yerr)
         gf.x_peak=popt_[1::3]
         gf.bic_weight=self.bic_weight
         gf.num_cold=self.num_cold
         popt,pcov=gf.fitting()
         
-        #popt,pcov=Gf.fitting(x,y,yerr,x_peak=popt_[1::3])
         #popt[1]=popt[1]-3
         popt_ori=np.copy(popt)
         print('Absorption fitting finished')
@@ -704,8 +746,8 @@ class SpectraDecomposing:
                 mean_Ts.append(m_)
                 sigma_meanTsf.append(np.sqrt(np.sum(wf*(all_Tsf[:,i]-m_)**2+wf*sigma_Tsf[:,i]**2)/np.sum(wf)*len(wf)/(len(wf)-1)))
             else:
-                mean_Ts.append(all_Tsf[:,i])
-                sigma_meanTsf.append(sigma_Tsf[:,i])
+                mean_Ts.append(float(np.ravel(all_Tsf[:, i])[0]))
+                sigma_meanTsf.append(float(np.ravel(sigma_Tsf[:, i])[0]))
             
         v_shi=v_shift[p]
         popt2=popt2_[p]
@@ -736,292 +778,68 @@ class SpectraDecomposing:
         return popt_ori,pcov,popt2,Ts,Ts_err,gausf,funT,Tfit_err,Or,fit_e,mean_Ts,sigma_meanTsf,nwarm,v_shi,_F
 
     def fit_and_plot(self):
-    #def fit_and_plot(x,y,yerr,xemi,yemi,yemi_err,ax,name='J003037-742901',peak_abs=[],peak_emi=[],F=[0,0.5,1],selfabs=False,
-    #                    C_Flim=0.97,Tsmin=9,savetxt=True,iteration_max=7,
-    #                        fit_mode='F_test',v_sh=0.0001):
-        '''
-        x:velocity
-        y:1-e^(-tau)
-        '''
-        ax=self.ax
-        x,y,yerr,xemi,yemi,yemi_err=self.x,np.copy(self.y),self.y_err,self.xemi,self.yemi,self.yemi_err
-        p=np.argwhere(yerr>0).flatten()
-        x,y,yerr=x[p],y[p],yerr[p]
-        p=np.argwhere(yemi_err>0).flatten()
-        xemi,yemi,yemi_err=xemi[p],yemi[p],yemi_err[p]
-        
-        if self.align_data:
-            common_x = np.linspace(max(xemi.min(), x.min()), min(xemi.max(), x.max()), min(len(xemi), len(x)))
-            interp_emi = interp1d(xemi, yemi, kind='linear', fill_value="extrapolate")
-            yemi = interp_emi(common_x)
-            interp_emi = interp1d(xemi, yemi_err, kind='linear', fill_value="extrapolate")
-            yemi_err = interp_emi(common_x)
-            interp_abs = interp1d(x, y, kind='linear', fill_value="extrapolate")
-            y= interp_abs(common_x)
-            interp_abs = interp1d(x, yerr, kind='linear', fill_value="extrapolate")
-            yerr= interp_abs(common_x)
-            x=common_x
-            xemi=common_x
-            
-            
-        peak_emi=self.peak_emi
-        F=self.F
-        Tsmin=self.Tsmin
-        v_sh=self.v_shift
-        name=self.name
-        
-        #ra, dec = self.parse_coords(name) # attach it later
-        popt,pcov,popt2,Ts,Ts_err,gausf,funT,Tfit_err,Or,fit_e,mean_Ts,sigma_meanTsf,nwarm,v_shift,_F=self.Gaussian_fit()
-        popt_ori=np.copy(popt)
-        ncold=int(len(popt)/3)
-        #if y.max()>=1.:
-        #    p=np.argwhere(y>=0.99).flatten()
-        #    y[p]=y[p]/y.max()*0.99
-        #    if self.savecsv:
-        #        with open(datapathbase + '/output_data/LMC_fitting/saturated_spectra.txt', 'a') as f:
-        #            f.write(f"{name}\n")
+        """Fit the spectra and draw the legacy four-panel diagnostic figure."""
+        if self.ax is None:
+            _, self.ax = create_legacy_axes()
+
+        x, y, yerr, xemi, yemi, yemi_err = self._prepare_inputs()
+        name = self.name
+        fit_output = self.Gaussian_fit()
+        (
+            popt,
+            pcov,
+            popt2,
+            Ts,
+            Ts_err,
+            gausf,
+            funT,
+            Tfit_err,
+            Or,
+            fit_e,
+            mean_Ts,
+            sigma_meanTsf,
+            nwarm,
+            v_shift,
+            F_values,
+        ) = fit_output
+        popt_ori = np.copy(popt)
 
         if self.savecsv:
-            #properties for full LOS
-            NHI_c=0
-            NHI_w=0
-            sigma_NHIc=0
-            sigma_NHIw=0
-            K=1.823e18/1e20
-            
-            if self.renew:
-                file_path=self.datapath+'CNMonlydata.csv'
-                if os.path.exists(file_path):
-                    df_existing = pd.read_csv(file_path)
-                    df_existing=df_existing[df_existing['Name'] != name]
-                    df_existing.reset_index(drop=True, inplace=True)
-                    df_existing.to_csv(file_path, mode='w', index=False, header=True)
-                    
-                file_path=self.datapath+'Fulldata.csv'
-                if os.path.exists(file_path):
-                    df_existing = pd.read_csv(file_path)
-                    df_existing=df_existing[df_existing['Name'] != name]
-                    df_existing.reset_index(drop=True, inplace=True)
-                    df_existing.to_csv(file_path, mode='w', index=False, header=True)
-                
-                file_path=self.datapath+'WNMonlydata.csv'
-                if os.path.exists(file_path):
-                    df_existing = pd.read_csv(file_path)
-                    df_existing=df_existing[df_existing['Name'] != name]
-                    df_existing.reset_index(drop=True, inplace=True)
-                    df_existing.to_csv(file_path, mode='w', index=False, header=True)
-                    
-            for i in range(ncold):
-                j=i*3
-                _popt=popt[j:j+3]
-                _pcov=pcov[j:j+3]
-                if mean_Ts[i]<=1000:
-                    NHI_c+=K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2]
-                    _d=((K*sigma_meanTsf[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2])**2+(K*mean_Ts[i]*_pcov[0]*np.sqrt(2*np.pi)*_popt[2])**2+
-                        (K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_pcov[2])**2)
-                    sigma_NHIc+=_d
-                else:
-                    NHI_w+=K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2]
-                    _d=((K*sigma_meanTsf[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2])**2+(K*mean_Ts[i]*_pcov[0]*np.sqrt(2*np.pi)*_popt[2])**2+
-                        (K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_pcov[2])**2)
-                    sigma_NHIw+=_d
-            sigma_NHIc=np.sqrt(sigma_NHIc)
-            print('nhi_c:',NHI_c,'error:',sigma_NHIc)
-            for i in range(int(len(gausf)/3)):
-                j=i*3
-                _popt=gausf[j:j+3]
-                _pcov=fit_e[j:j+3]
-                #print(gausf.shape,fit_e.shape)
-                #NHI_w=abs(1.823e18*trapz(gaussian_func_multi(xemi,*gausf), xemi)/1e20)
-                NHI_w+=K*_popt[0]*np.sqrt(2*np.pi)*_popt[2]
-                _d=(K*_popt[0]*np.sqrt(2*np.pi)*_pcov[2])**2+(K*_pcov[0]*np.sqrt(2*np.pi)*_popt[2])**2
-                #print('errors:', _popt,_pcov,_d)
-                sigma_NHIw+=_d
-            sigma_NHIw=np.sqrt(sigma_NHIw)
-            print('nhi_w:',NHI_w,'error:',sigma_NHIw)
-            f_c=NHI_c/(NHI_c+NHI_w)
-            sigma_fc=np.sqrt(((NHI_c/(NHI_c+NHI_w)**2*sigma_NHIw))**2+((NHI_w/(NHI_c+NHI_w)**2*sigma_NHIc))**2)
-            NHI_uncorr=K*np.trapz(funT,xemi)
-            print('fc:',f_c,'error:',sigma_fc)
-            data = {
-                "Name": name,
-                "NHI_c": NHI_c,
-                "Sigma_NHIc": sigma_NHIc,
-                "NHI_w": NHI_w,
-                "Sigma_NHIw": sigma_NHIw,
-                "f_c": f_c,
-                "Sigma_fc": sigma_fc,
-                "Tsky":self.Tsky,
-                "NHI_uncorr_fit":NHI_uncorr
-            }
-            df = pd.DataFrame([data])
-            file_path=self.datapath+'Fulldata.csv'
-            #file_path=datapathbase + '/output_data/LMC_fitting/Fulldata.csv'
-        
-            write_header = not os.path.exists(file_path)
-            df.to_csv(file_path, mode='a', index=False,header=write_header)
-            #a=np.c_[name,NHI_c,sigma_NHIc,NHI_w,sigma_NHIw,f_c,sigma_fc]
-            #with open(datapathbase+'/output_data/LMC_fitting/Fulldata.txt', 'a') as file:
-            #    np.savetxt(file, a)
-            warm_i=[]
-            for i in range(ncold):
-                j=i*3
-                _popt=popt[j:j+3]
-                _pcov=pcov[j:j+3]
-                #fwhm_=2*np.sqrt(-2*_popt[2]**2*np.log((1-np.sqrt(1-_popt[0]))/_popt[0]))
-                fwhm_=2.35482*_popt[2]
-                
-                NHI_c=K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2]
-                NHI_c_err=np.sqrt((K*sigma_meanTsf[i]*_popt[0]*np.sqrt(2*np.pi)*_popt[2])**2+(K*mean_Ts[i]*_pcov[0]*np.sqrt(2*np.pi)*_popt[2])**2+
-                    (K*mean_Ts[i]*_popt[0]*np.sqrt(2*np.pi)*_pcov[2])**2)
-                #NHI_w=abs(1.823e18*trapz(gaussian_func_multi(xemi,*gausf), xemi)/1e20)
-                #NHI_all=abs(1.823e18*trapz(funT, xemi)/1e20)
-                T_K=21.866*fwhm_**2
-                
-                if i==0:
-                    #latex_code = r'''%d &%s & %.4f & %.4f& %.2f & %.2f $\pm$ %.2f& %d & %.2f $\pm$ %.2f  & %.1f $\pm$ %.1f  & %.2f $\pm$ %.2f  & %d & %.2f  \\  '''%(number_source,name_abs[-23:-9],ra,dec,f_c,mean_Ts[i],sigma_meanTsf[i],Or[i]
-                #      ,_popt[0],_pcov[0],_popt[1],_pcov[1],fwhm_,2.355*_pcov[2],T_K,
-                #      NHI_c)
-                    latex_code = r'''%s & %.0f$\pm$ %.0f & %.0f $\pm$ %.0f& %d & %.2f $\pm$ %.2f  & %.1f $\pm$ %.1f  & %.2f $\pm$ %.2f & %d & %.2f $\pm$ %.2f \\  '''%(name,f_c*100,sigma_fc*100,mean_Ts[i],sigma_meanTsf[i],Or[i]
-                        ,_popt[0],_pcov[0],_popt[1],_pcov[1],fwhm_,2.355*_pcov[2],T_K,
-                        NHI_c, NHI_c_err)
-                else:
-                    #latex_code = r'''
-                    #& &  & & & %.2f $\pm$ %.2f & %d & %.2f $\pm$ %.2f  & %.1f $\pm$ %.1f  & %.2f $\pm$ %.2f & %d & %.2f  \\ 
+            write_table_outputs(
+                self,
+                name=name,
+                popt=popt,
+                pcov=pcov,
+                gausf=gausf,
+                funT=funT,
+                xemi=xemi,
+                Or=Or,
+                fit_e=fit_e,
+                mean_Ts=mean_Ts,
+                sigma_meanTsf=sigma_meanTsf,
+                v_shift=v_shift,
+                F_values=F_values,
+            )
 
-                    #     NHI_c)
-                    latex_code = r'''
-                      & & & %.0f $\pm$ %.0f & %d & %.2f $\pm$ %.2f  & %.1f $\pm$ %.1f  & %.2f $\pm$ %.2f & %d & %.2f $\pm$ %.2f \\ 
-
-                    '''%(mean_Ts[i],sigma_meanTsf[i],Or[i],_popt[0],_pcov[0],_popt[1],_pcov[1],fwhm_,2.355*_pcov[2],T_K,
-                        NHI_c, NHI_c_err)
-            # print('popt:',_popt[0])
-                
-                data = {
-                    "Name": name, "tau": _popt[0], "Sigma_tau": _pcov[0], "velocity_tau": _popt[1],"Sigma_velocity_tau": _pcov[1], "fwhm": fwhm_, 
-                    "Sigma_fwhm": 2.355*_pcov[2], 
-                    "mean_Ts": mean_Ts[i],"sigma_mean_Ts": sigma_meanTsf[i], "T_k_max": T_K, "NHI_c": NHI_c, "Sigma_NHI_c": NHI_c_err, 
-                    "v_shift": v_shift[i], "Order":Or[i]
-                }
-                df = pd.DataFrame([data])
-                file_path=self.datapath+'CNMonlydata.csv'
-                write_header = not os.path.exists(file_path)
-                df.to_csv(file_path, mode='a', index=False,header=write_header)
-                # with open(self.datapath+'output.txt', 'a') as file:
-                #     file.write(latex_code)
-                #a=np.c_[name,ra,dec,_popt[0],_popt[1],fwhm_,mean_Ts[i],sigma_meanTsf[i],T_K,
-                #     NHI_c,NHI_c_err,v_shift[i]]
-                #with open(datapathbase+'/output_data/LMC_fitting/CNMonlydata.txt', 'a') as file:
-                #    np.savetxt(file, a)
-
-                #with open(datapathbase+'/output_data/LMC_fitting/CNMoutput.txt', 'a') as file:
-                
-            #properties for WNM components
-            for i in range(int(len(gausf)/3)):
-                j=i*3
-                _popt=gausf[j:j+3]
-                _popt_err=fit_e[j:j+3]
-                fwhm_=2.35482*_popt[2]
-                NHI_w=K*_popt[0]*np.sqrt(2*np.pi)*_popt[2]
-                NHI_w_err=np.sqrt((K*_popt[0]*np.sqrt(2*np.pi)*_popt_err[2])**2+(K*_popt_err[0]*np.sqrt(2*np.pi)*_popt[2])**2)
-                T_K=21.866*fwhm_**2
-                #latex_code = r'''
-                #    & &  &  & & &%.1f & %.2f $\pm$ %.2f & %.1f $\pm$ %.1f & %.2f $\pm$ %.2f & %d & %.2f  \\ 
-                #    '''%(F[i],_popt[0],_popt_err[0],_popt[1],_popt_err[1],fwhm_,2.355*_popt_err[2],T_K, NHI_w)
-                latex_code = r'''
-                     &  & & &%.1f & %.2f $\pm$ %.2f & %.1f $\pm$ %.1f & %.2f $\pm$ %.2f & %d & %.2f $\pm$ %.2f \\ 
-                    '''%(_F[i],_popt[0],_popt_err[0],_popt[1],_popt_err[1],fwhm_,2.355*_popt_err[2], T_K,NHI_w,NHI_w_err)
-                #with open(datapathbase+'/output_data/LMC_fitting/CNMoutput.txt', 'a') as file:
-                # with open(self.datapath+'output.txt', 'a') as file:
-                #     file.write(latex_code)
-                #print('nhi1',NHI_w)
-                data = {
-                    "Name": name,"TB_WNM": _popt[0], "Sigma_TB_WNM": _popt_err[0], "velocity_TB": _popt[1],"Sigma_velocity_TB": _popt_err[1], "fwhm": fwhm_, 
-                    "Sigma_fwhm": 2.355*_popt_err[2], "T_k_max": T_K,
-                    'NHI_w':NHI_w,'Sigma_NHI_w':NHI_w_err, "F_value":_F[i]
-                }
-                df = pd.DataFrame([data])
-                file_path=self.datapath+'WNMonlydata.csv'
-                #file_path=datapathbase + '/output_data/LMC_fitting/WNMonlydata.csv'
-                write_header = not os.path.exists(file_path)
-                df.to_csv(file_path, mode='a', index=False,header=write_header)
-                #a=np.c_[name,NHI_w,NHI_w_err]
-                #with open(datapathbase+'/output_data/LMC_fitting/WNMonlydata.txt', 'a') as file:
-                #    np.savetxt(file, a)
-            
-            latex_code=r'''\hline
-            '''
-            #with open(datapathbase+'/output_data/LMC_fitting/CNMoutput.txt', 'a') as file:
-            with open(self.datapath+'output.txt', 'a') as file:
-                file.write(latex_code)
-        
-        print()
-        #ax[0].fill_between(xemi,yemi+ yemi_err,yemi- yemi_err,alpha=0.2)
-        #print(np.min(yemi),np.min(xemi))
-        ax[0].plot(xemi, yemi, label='GASKAP emission',linewidth=1.2,c='tab:blue',zorder=20)
-        ax[0].plot(xemi, funT, label='Best fit',linewidth=3,alpha=0.9,c='tab:orange')
-        #ax[0].fill_between(xemi,yemi+yemi_err,yemi-yemi_err,alpha=0.2,facecolor='gray',edgecolor='gray')
-        for i in range(ncold):
-            j=i*3
-            _popt=popt[j:j+3]
-            _popt[1]=_popt[1]+v_shift[i]
-            #ax[0].plot(xemi, (1-np.exp(-self.gaussian_func(xemi,*_popt)))*Ts[i],
-            #        label='CNM, Ts_best=%.2f$\pm$%.2f K, \n Ts_mean=%.2f$\pm$%.2f K, \n v_shift=%.1f km/s'%(Ts[i],Ts_err[i],
-            #                                                                            mean_Ts[i],sigma_meanTsf[i],v_shift[i]),
-            #        linewidth=1.8,linestyle=linestyle_plot[i],color='green')
-            ax[0].plot(xemi, (1-np.exp(-self.gaussian_func(xemi,*_popt)))*Ts[i],
-                    label='CNM,Ts=%.0f$\pm$%.0f K'%( mean_Ts[i],sigma_meanTsf[i]),
-                       linewidth=1.8,linestyle=linestyle_plot[i],color='green')
-        
-        #print('gausf',gausf)
-        for i in range(int(len(gausf)/3)):
-            j=i*3
-            _popt=gausf[j:j+3]
-            ax[0].plot(xemi, self.gaussian_func(xemi,*_popt), label='WNM,F=%.1f \n [%.2f,%.2f,%.2f]'%(_F[i],_popt[0],_popt[1],
-                                                                                               2.35482*_popt[2]),
-                   linewidth=1.8,linestyle=linestyle_plot[i],color='gray')
-            
-            # ax[0].plot(xemi, self.gaussian_func(xemi,*_popt), label='WNM',
-            #         linewidth=1.8,linestyle=linestyle_plot[i],color='gray')
-        
-        ax[0].set_title(name)
-        ax[0].set_ylabel(r'$T_B$ (K)')
-        nco=2 if nwarm>4 else 1
-        ax[0].legend(framealpha=0,fontsize='x-small',ncol=nco)
-        plt.subplots_adjust(hspace=0)
-        ax[1].plot(xemi,yemi-funT,linewidth=1.2,c='black')
-        #ax[1].plot(x_,-np.log(1-gaussian_func_multi(x_,*popt)),linewidth=0.7,c='black')
-        #ax[1].fill_between(xemi,Tfit_err,-Tfit_err,alpha=0.2,facecolor='gray',edgecolor='gray')
-        ax[1].fill_between(xemi,yemi_err,-yemi_err,alpha=0.2,facecolor='gray',edgecolor='gray')
-        ax[1].set_ylabel('Residual')
-        ax[1].set_xlabel('vlsr (km/s)')
-        zero=np.array([0]*np.shape(xemi)[0])
-        ax[1].plot(xemi,zero,linewidth=1,c='black')
-        plt.subplots_adjust(hspace=0)
-        #y=1-np.exp(-y)
-        #yerr=1-np.exp(-yerr)
-        a=1-np.exp(-self.gaussian_func_multi(x,*popt_ori))
-        ax[2].plot(x, y, label='GASKAP absorption',linewidth=1.2,c='tab:blue',zorder=20)
-        ax[2].plot(x, a, label='Best fit',linewidth=3,alpha=0.9,c='tab:orange')
-        
-        for i in range(ncold):
-            j=i*3
-            _popt=popt_ori[j:j+3]
-            ax[2].plot(x, 1-np.exp(-self.gaussian_func(x,*_popt)), 
-                   label=r'$\tau$ Fitting parameters:'+'\n [%.2f,%.2f,%.2f]'%(_popt[0],_popt[1],2.35482*_popt[2])
-                   ,linewidth=1.8,linestyle=linestyle_plot[i],c='green')
-            # ax[2].plot(x, 1-np.exp(-self.gaussian_func(x,*_popt)), 
-            #         label=r'CNM component'
-            #         ,linewidth=1.8,linestyle=linestyle_plot[i],c='green')
-            #ax[2].fill_betweenx([0,y.max()],_popt[1]-_popt[2],_popt[1]+_popt[2],alpha=0.2,color='red')
-        ax[2].set_ylabel(r'$1-e^{-\tau}$')
-        ax[2].legend(framealpha=0,fontsize='small')
-        plt.subplots_adjust(hspace=0)
-        #err=sigma1_data(y-gaussian_func_multi(x,*popt))
-        ax[3].plot(x,y-a,linewidth=1.2,c='black')
-    # ax[3].fill_between(x,err,-err,alpha=0.2,facecolor='gray',edgecolor='gray')
-        ax[3].fill_between(x,yerr,-yerr,alpha=0.2,facecolor='gray',edgecolor='gray')
-        ax[3].set_ylabel('Residual')
-        ax[3].set_xlabel('vlsr (km/s)')
-        zero=np.array([0]*np.shape(xemi)[0])
-        ax[3].plot(xemi,zero,linewidth=1,c='black')
+        plot_fit_panels(
+            self,
+            ax=self.ax,
+            x=x,
+            y=y,
+            yerr=yerr,
+            xemi=xemi,
+            yemi=yemi,
+            yemi_err=yemi_err,
+            name=name,
+            popt_ori=popt_ori,
+            popt=popt,
+            Ts=Ts,
+            gausf=gausf,
+            funT=funT,
+            mean_Ts=mean_Ts,
+            sigma_meanTsf=sigma_meanTsf,
+            nwarm=nwarm,
+            v_shift=v_shift,
+            F_values=F_values,
+        )
+        return fit_output

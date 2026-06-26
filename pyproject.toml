@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Absorption_fitting"
+version = "0.1.0"
+description = "Gaussian-based absorption and emission spectral fitting tools."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "astropy>=5.0",
+  "gaussFitSpec>=0.1.1",
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "scipy>=1.10"
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pytest>=7.4",
+  "twine>=5.0"
+]
+docs = [
+  "sphinx>=8.0",
+  "sphinx-rtd-theme>=3.0"
+]
+
+[project.urls]
+Documentation = "https://absorption-fitting.readthedocs.io/en/latest/"
+Homepage = "https://pypi.org/project/Absorption_fitting/"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
