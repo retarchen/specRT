@@ -15,7 +15,7 @@ In the original notebook workflow the second column is stored as
 
 .. code-block:: python
 
-   from Absorption_fitting import load_six_column_spectrum
+   from spec_rt import load_six_column_spectrum
 
    x, y, yerr, xemi, yemi, yemi_err = load_six_column_spectrum(
        "examples/r4.txt",
@@ -25,7 +25,7 @@ In the original notebook workflow the second column is stored as
 After loading, ``y`` is guaranteed to be in the expected ``1 - exp(-tau)``
 form, and the helper also drops non-finite emission rows.
 
-Use :func:`Absorption_fitting.validate_absorption_input` to confirm that the
+Use :func:`spec_rt.validate_absorption_input` to confirm that the
 absorption baseline remains close to zero before fitting.
 
 Common checks

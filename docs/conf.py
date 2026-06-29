@@ -1,4 +1,4 @@
-"""Sphinx configuration for Absorption_fitting."""
+"""Sphinx configuration for specRT."""
 
 from pathlib import Path
 import sys
@@ -6,7 +6,7 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-project = "Absorption_fitting"
+project = "specRT"
 author = "Project contributors"
 release = "0.1.0"
 

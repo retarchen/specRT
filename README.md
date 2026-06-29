@@ -1,6 +1,6 @@
-# Absorption_fitting
+# specRT
 
-`Absorption_fitting` packages the existing Gaussian absorption/emission
+`specRT` packages the existing Gaussian absorption/emission
 spectral fitting code as an installable Python project.
 
 ## Features
@@ -26,8 +26,10 @@ python -m build
 
 ## Quick Start
 
+The PyPI project name is `specRT`; the Python import package is `spec_rt`.
+
 ```python
-from Absorption_fitting import (
+from spec_rt import (
     SpectraDecomposing,
     create_legacy_axes,
     fit_spectrum,
@@ -58,13 +60,13 @@ spec_fit.fit_and_plot()
 ## Repository Layout
 
 ```text
-Absorption_fitting/
+specRT/
 ├── pyproject.toml
 ├── README.md
 ├── MANIFEST.in
 ├── docs/
 ├── src/
-│   └── Absorption_fitting/
+│   └── spec_rt/
 │       ├── __init__.py
 │       ├── spectra_decomposing.py
 │       ├── spectra_decomposing_io.py
@@ -78,3 +80,4 @@ Absorption_fitting/
 - Replace the placeholder project URLs in `pyproject.toml`
 - Add a `LICENSE` file once you choose the license you want
 - Add more usage examples and validation tests for your data workflows
+- The old `Absorption_fitting` import path is kept as a compatibility wrapper

@@ -16,9 +16,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from Absorption_fitting.spectra_decomposing_io import write_table_outputs
-from Absorption_fitting.spectra_decomposing_plotting import create_legacy_axes
-from Absorption_fitting.spectra_decomposing_utils import (
+from spec_rt.spectra_decomposing_io import write_table_outputs
+from spec_rt.spectra_decomposing_plotting import create_legacy_axes
+from spec_rt.spectra_decomposing_utils import (
     align_spectra_grids,
     filter_positive_error_rows,
 )

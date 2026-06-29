@@ -6,7 +6,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from Absorption_fitting import (
+from spec_rt import (
     SpectrumFitResult,
     sd,
     SpectraDecomposing,
@@ -15,10 +15,12 @@ from Absorption_fitting import (
     load_six_column_spectrum,
     validate_absorption_input,
 )
+from Absorption_fitting import SpectraDecomposing as LegacySpectraDecomposing
 
 
 def test_public_api_exports():
     assert sd is SpectraDecomposing
+    assert LegacySpectraDecomposing is SpectraDecomposing
     assert callable(fit_spectrum)
     assert SpectrumFitResult is not None
     assert callable(load_six_column_spectrum)

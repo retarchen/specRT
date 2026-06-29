@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from Absorption_fitting.spectra_decomposing_io import (
+from spec_rt.spectra_decomposing_io import (
     load_six_column_spectrum,
     validate_absorption_input,
 )

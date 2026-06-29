@@ -11,12 +11,15 @@ Basic imports:
 
 .. code-block:: python
 
-   from Absorption_fitting import (
+   from spec_rt import (
        SpectraDecomposing,
        create_legacy_axes,
        fit_spectrum,
        load_six_column_spectrum,
    )
+
+The old ``Absorption_fitting`` import path is still available as a
+compatibility wrapper, but new code should prefer ``spec_rt``.
 
 Direct Gaussian fitting
 -----------------------

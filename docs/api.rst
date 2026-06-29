@@ -1,23 +1,23 @@
 API Reference
 =============
 
-.. automodule:: Absorption_fitting
+.. automodule:: spec_rt
    :members:
    :exclude-members: SpectrumFitResult
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: Absorption_fitting.spectra_decomposing
+.. automodule:: spec_rt.spectra_decomposing
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: Absorption_fitting.spectra_decomposing_io
+.. automodule:: spec_rt.spectra_decomposing_io
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: Absorption_fitting.spectra_decomposing_plotting
+.. automodule:: spec_rt.spectra_decomposing_plotting
    :members:
    :undoc-members:
    :show-inheritance:

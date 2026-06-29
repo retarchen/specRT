@@ -10,8 +10,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from Absorption_fitting import fit_spectrum
-from Absorption_fitting.spectra_decomposing import _GaussianFitSpecAdapter
+from spec_rt import fit_spectrum
+from spec_rt.spectra_decomposing import _GaussianFitSpecAdapter
 
 
 def test_fit_spectrum_fixed_component_boundary_case():

@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "Absorption_fitting"
+name = "specRT"
 version = "0.1.0"
 description = "Gaussian-based absorption and emission spectral fitting tools."
 readme = "README.md"
@@ -29,8 +29,8 @@ docs = [
 ]
 
 [project.urls]
-Documentation = "https://absorption-fitting.readthedocs.io/en/latest/"
-Homepage = "https://pypi.org/project/Absorption_fitting/"
+Documentation = "https://specrt.readthedocs.io/en/latest/"
+Homepage = "https://pypi.org/project/specRT/"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

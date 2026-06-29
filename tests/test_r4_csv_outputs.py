@@ -14,9 +14,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from Absorption_fitting import SpectraDecomposing
-from Absorption_fitting.spectra_decomposing_io import load_six_column_spectrum
-from Absorption_fitting.spectra_decomposing_plotting import create_legacy_axes
+from spec_rt import SpectraDecomposing
+from spec_rt.spectra_decomposing_io import load_six_column_spectrum
+from spec_rt.spectra_decomposing_plotting import create_legacy_axes
 
 
 def assert_csv_has_no_array_strings(path):

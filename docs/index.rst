@@ -1,7 +1,7 @@
-Absorption_fitting documentation
-================================
+specRT documentation
+====================
 
-This site documents the installable ``Absorption_fitting`` Python package.
+This site documents the installable ``specRT`` Python package.
 
 .. toctree::
    :maxdepth: 2
