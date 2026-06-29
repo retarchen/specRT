@@ -14,7 +14,7 @@ developing both packages locally, install ``GaussianFitSpectra`` first:
 
    cd ../GaussianFitSpectra
    pip install -e .
-   cd ../Absorption_fitting
+   cd ../specRT
    pip install -e .[dev,docs]
 
 To build wheels and source distributions for PyPI:

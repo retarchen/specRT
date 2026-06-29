@@ -80,4 +80,3 @@ specRT/
 - Replace the placeholder project URLs in `pyproject.toml`
 - Add a `LICENSE` file once you choose the license you want
 - Add more usage examples and validation tests for your data workflows
-- The old `Absorption_fitting` import path is kept as a compatibility wrapper

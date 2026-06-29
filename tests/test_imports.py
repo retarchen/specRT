@@ -15,12 +15,10 @@ from spec_rt import (
     load_six_column_spectrum,
     validate_absorption_input,
 )
-from Absorption_fitting import SpectraDecomposing as LegacySpectraDecomposing
 
 
 def test_public_api_exports():
     assert sd is SpectraDecomposing
-    assert LegacySpectraDecomposing is SpectraDecomposing
     assert callable(fit_spectrum)
     assert SpectrumFitResult is not None
     assert callable(load_six_column_spectrum)
