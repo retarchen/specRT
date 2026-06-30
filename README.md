@@ -1,82 +1,22 @@
 # specRT
 
-`specRT` packages the existing Gaussian absorption/emission
-spectral fitting code as an installable Python project.
+[![PyPI version](https://img.shields.io/pypi/v/specRT.svg)](https://pypi.org/project/specRT/)
+[![Documentation Status](https://readthedocs.org/projects/specrt/badge/?version=latest)](https://specrt.readthedocs.io/en/latest/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21052795.svg)](https://doi.org/10.5281/zenodo.21052795)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Features
+Gaussian-based radiative-transfer fitting for absorption and emission spectra.
 
-- Gaussian spectrum fitting through the external `gaussFitSpec` package
-- Joint absorption/emission decomposition with `SpectraDecomposing`
-- PyPI-ready `pyproject.toml` metadata
-- Sphinx documentation scaffolding
+`specRT` fits absorption and emission spectra with Gaussian components and
+exports radiative-transfer decomposition results. The PyPI project name is
+`specRT`; the Python import package is `spec_rt`.
 
-## Installation
+## Links
 
-Install locally from the repository root:
+- PyPI: https://pypi.org/project/specRT/
+- Documentation: https://specrt.readthedocs.io/en/latest/installation.html
+- Source code: https://github.com/retarchen/specRT
+- Citation DOI: https://doi.org/10.5281/zenodo.21052795
 
-```bash
-pip install -e .[dev,docs]
-```
-
-Build distribution files for PyPI:
-
-```bash
-python -m build
-```
-
-## Quick Start
-
-The PyPI project name is `specRT`; the Python import package is `spec_rt`.
-
-```python
-from spec_rt import (
-    SpectraDecomposing,
-    create_legacy_axes,
-    fit_spectrum,
-    load_six_column_spectrum,
-)
-```
-
-Load the bundled six-column example. Its absorption column is already in
-``1 - exp(-tau)`` form:
-
-```python
-x, y, yerr, xemi, yemi, yemi_err = load_six_column_spectrum(
-    "examples/example_spec.txt",
-    absorption_format="one_minus_exp_tau",
-)
-```
-
-Create the legacy four-panel layout and run the radiative-transfer fit:
-
-```python
-fig, axes = create_legacy_axes()
-spec_fit = SpectraDecomposing(x, y, yerr, xemi, yemi, yemi_err)
-spec_fit.ax = axes
-spec_fit.align_data = True
-spec_fit.fit_and_plot()
-```
-
-## Repository Layout
-
-```text
-specRT/
-├── pyproject.toml
-├── README.md
-├── MANIFEST.in
-├── docs/
-├── src/
-│   └── spec_rt/
-│       ├── __init__.py
-│       ├── spectra_decomposing.py
-│       ├── spectra_decomposing_io.py
-│       ├── spectra_decomposing_plotting.py
-│       └── spectra_decomposing_utils.py
-└── tests/
-```
-
-## Before Publishing
-
-- Replace the placeholder project URLs in `pyproject.toml`
-- Add a `LICENSE` file once you choose the license you want
-- Add more usage examples and validation tests for your data workflows
+This release is archived on Zenodo and can be cited with DOI
+`10.5281/zenodo.21052795`.
