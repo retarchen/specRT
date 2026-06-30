@@ -3,8 +3,8 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "specRT"
-version = "0.1.0"
+name = "spec_rt"
+version = "0.1.1"
 description = "Gaussian-based absorption and emission spectral fitting tools."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,7 +31,7 @@ docs = [
 
 [project.urls]
 Documentation = "https://specrt.readthedocs.io/en/latest/"
-Homepage = "https://pypi.org/project/specRT/"
+Homepage = "https://pypi.org/project/spec-rt/"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,7 +1,7 @@
-specRT documentation
-====================
+spec_rt documentation
+=====================
 
-This site documents the installable ``specRT`` Python package.
+This site documents the installable ``spec_rt`` Python package.
 
 .. toctree::
    :maxdepth: 2
