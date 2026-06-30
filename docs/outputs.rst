@@ -24,7 +24,7 @@ Use ``renew=True`` when repeating a fit for the same source:
 
    spec_fit.savecsv = True
    spec_fit.renew = True
-   spec_fit.datapath = "examples/r4_csv_outputs"
+   spec_fit.datapath = "examples/example_spec_csv_outputs"
    spec_fit.fit_and_plot()
 
 This removes previous rows with the same ``Name`` from the three CSV files

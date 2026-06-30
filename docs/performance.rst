@@ -21,6 +21,8 @@ Practical speed tips
   a fast first pass, then restore ``[0, 0.5, 1]`` for a final run.
 - Limit absorption components by setting ``peak_abs`` manually or using
   ``num_cold`` when the automatic fit over-splits noisy absorption spectra.
+- Set ``max_auto_warm_components`` to cap the automatic emission search when
+  you want automatic centers but do not want to test many WNM components.
 - Keep ``align_data=True`` when absorption and emission velocity grids differ.
 
 Example fast first pass
@@ -28,7 +30,8 @@ Example fast first pass
 
 .. code-block:: python
 
-   spec_fit.peak_emi = [-250, -230]
+   spec_fit.peak_emi = []
+   spec_fit.max_auto_warm_components = 1
    spec_fit.F = [0.5]
    spec_fit.num_cold = 5
    spec_fit.fit_and_plot()

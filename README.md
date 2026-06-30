@@ -37,13 +37,13 @@ from spec_rt import (
 )
 ```
 
-Load the bundled six-column example and convert the absorption column from
-``exp(-tau)`` to ``1 - exp(-tau)``:
+Load the bundled six-column example. Its absorption column is already in
+``1 - exp(-tau)`` form:
 
 ```python
 x, y, yerr, xemi, yemi, yemi_err = load_six_column_spectrum(
-    "examples/r4.txt",
-    absorption_format="transmission",
+    "examples/example_spec.txt",
+    absorption_format="one_minus_exp_tau",
 )
 ```
 

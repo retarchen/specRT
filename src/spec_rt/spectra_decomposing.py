@@ -20,7 +20,7 @@ from .spectra_decomposing_utils import align_spectra_grids, filter_positive_erro
 
 
 class _GaussianFitSpecAdapter:
-    """Small bridge from the old stateful API to ``gaussFitSpec.fit_spectrum``."""
+    """Thin compatibility bridge from legacy code to ``gaussFitSpec``."""
 
     def __init__(self, x, y, y_err):
         self.x = x
@@ -33,6 +33,10 @@ class _GaussianFitSpecAdapter:
         self.bic_weight = 10
         self.num_cold = 0
         self.last_result = None
+        self.fit_label = "absorption"
+        self.verbose = True
+        self.initial_center_window = None
+        self.filter_components = False
 
     @staticmethod
     def gaussian_func(x, *params):
@@ -44,22 +48,28 @@ class _GaussianFitSpecAdapter:
         return multi_gaussian(x, *gausf)
 
     def fitting(self):
-        """Fit with ``gaussFitSpec`` and return legacy ``(params, errors)``."""
-        method = "f_test" if self.fit_mode.lower() == "f_test" else "bic"
-        fit_kwargs = {
-            "name": "absorption",
+        """Fit with ``gaussFitSpec.fit_spectrum`` and return legacy arrays."""
+        method = "f_test" if self.fit_mode.lower() in {"f-test", "f_test"} else "bic"
+        kwargs = {
+            "name": self.fit_label,
             "method": method,
             "max_components": int(self.nGaussianMax),
-            "f_test_alpha": max(1.0 - float(self.CF_limit), 1.0e-4),
+            "bic_weight": float(self.bic_weight),
+            "positive_amplitudes": True,
+            "filter_components": bool(self.filter_components),
+            "verbose": bool(self.verbose),
         }
         if len(self.x_peak) > 0:
-            fit_kwargs["initial_centers"] = list(self.x_peak)
+            kwargs["initial_centers"] = np.asarray(list(self.x_peak), dtype=float)
+            kwargs["initial_center_window"] = self.initial_center_window
         elif self.num_cold > 0:
-            fit_kwargs["fixed_n_components"] = int(self.num_cold)
+            kwargs["fixed_n_components"] = int(self.num_cold)
 
-        self.last_result = fit_spectrum(self.x, self.y, self.y_err, **fit_kwargs)
-        popt = np.asarray(self.last_result.parameters, dtype=float)
-        covariance = self.last_result.covariance
+        result = fit_spectrum(self.x, self.y, self.y_err, **kwargs)
+        self.last_result = result
+
+        popt = np.asarray(result.parameters, dtype=float)
+        covariance = result.covariance
         if covariance is None or np.ndim(covariance) != 2:
             pcov = np.full_like(popt, np.nan, dtype=float)
         else:
@@ -101,6 +111,8 @@ class SpectraDecomposing:
         self.datapath='./'
         self.renew=False
         self.align_data=False
+        self.max_auto_warm_components=None
+        self.absorption_center_window=5.0
 
     def _prepare_inputs(self):
         """Filter invalid rows, validate absorption format, and align grids if needed."""
@@ -221,9 +233,13 @@ class SpectraDecomposing:
         
         print('start absorption fitting')
         gf=_GaussianFitSpecAdapter(x,ynew,yerr)
+        gf.fit_label="smoothed"
         gf.x_peak=self.peak_abs
+        gf.fit_mode=self.fit_mode
         gf.bic_weight=self.bic_weight
         gf.num_cold=self.num_cold
+        gf.initial_center_window=self.absorption_center_window if len(self.peak_abs) > 0 else None
+        gf.filter_components=len(self.peak_abs) > 0
         popt_,pcov_=gf.fitting()
 
         #print(popt_[1::3])
@@ -235,9 +251,13 @@ class SpectraDecomposing:
         y=-np.log(1-y)
         
         gf=_GaussianFitSpecAdapter(x,y,yerr)
+        gf.fit_label="tau"
         gf.x_peak=popt_[1::3]
+        gf.fit_mode=self.fit_mode
         gf.bic_weight=self.bic_weight
         gf.num_cold=self.num_cold
+        gf.initial_center_window=self.absorption_center_window
+        gf.filter_components=True
         popt,pcov=gf.fitting()
         
         #popt[1]=popt[1]-3
@@ -511,12 +531,17 @@ class SpectraDecomposing:
                     print('BIC ',_bbic,'Mean_score ', _mmean_score,'nemi=',0)
                     improving = True
                     nwarm=1
+                    best_p0_1 = np.copy(p0_1)
+                    best_nwarm = 0
                     y_res=y
                     num=0
                     lim=1
                     #while improving or num<=lim:
                     bic_limit=500
-                    while improving:
+                    while improving and (
+                        self.max_auto_warm_components is None
+                        or nwarm <= self.max_auto_warm_components
+                    ):
                         #print(improving, num,lim)
                         _bbic=self.bic_max_value
                         _mmean_score=self.bic_max_value
@@ -602,6 +627,8 @@ class SpectraDecomposing:
                         #if bic< best_bic+.1:
                             best_bic = bic
                             best_mean_score=mean_score
+                            best_p0_1 = np.copy(p0_1)
+                            best_nwarm = nwarm - 1
                             if not improving:
                                 num=0
                                 lim=0
@@ -621,12 +648,17 @@ class SpectraDecomposing:
                     #print(p0_1)
                 # print(p0_1,nwarm)
                     #back=-3*(lim+1)
+                    final_p0_1 = best_p0_1
+                    final_nwarm = best_nwarm
+                    if final_nwarm == 0 and len(p0_1) > 2 * ncold:
+                        final_p0_1 = p0_1[:-3]
+                        final_nwarm = max(nwarm - 2, 0)
                     back=-3
                 # print(back,p0_1[:back])
                 # res1,popt2_1,funTexp1,Fsequences1,wf1,sigma_Tsf1,all_Tsf1,order1,fit_err1,v_shift1=loop(p0_1[:back],ncold, x, 
                 #                                                                        y,y_error,popt,nwarm=nwarm-2-lim)
-                    res1,popt2_1,funTexp1,Fsequences1,wf1,sigma_Tsf1,all_Tsf1,order1,fit_err1,v_shift1=loop(p0_1[:back],ncold, x, 
-                                                                                        y,y_error,popt,nwarm=nwarm-2)
+                    res1,popt2_1,funTexp1,Fsequences1,wf1,sigma_Tsf1,all_Tsf1,order1,fit_err1,v_shift1=loop(final_p0_1,ncold, x, 
+                                                                                        y,y_error,popt,nwarm=final_nwarm)
          
                 # print('res1',np.array(res1))
                 #  print(res1)

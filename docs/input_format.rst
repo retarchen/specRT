@@ -1,7 +1,7 @@
 Input Format
 ============
 
-The bundled ``examples/r4.txt`` file uses six columns:
+The bundled ``examples/example_spec.txt`` file uses six columns:
 
 1. absorption velocity
 2. absorption spectrum
@@ -10,16 +10,16 @@ The bundled ``examples/r4.txt`` file uses six columns:
 5. emission spectrum
 6. emission spectrum error
 
-In the original notebook workflow the second column is stored as
-``exp(-tau)`` and is converted before fitting:
+The bundled example stores the second column directly as ``1 - exp(-tau)``,
+so it is kept unchanged before fitting:
 
 .. code-block:: python
 
    from spec_rt import load_six_column_spectrum
 
    x, y, yerr, xemi, yemi, yemi_err = load_six_column_spectrum(
-       "examples/r4.txt",
-       absorption_format="transmission",
+       "examples/example_spec.txt",
+       absorption_format="one_minus_exp_tau",
    )
 
 After loading, ``y`` is guaranteed to be in the expected ``1 - exp(-tau)``
@@ -43,10 +43,10 @@ If your raw absorption file stores transmission as ``exp(-tau)``, use:
 
 .. code-block:: python
 
-   load_six_column_spectrum("examples/r4.txt", absorption_format="transmission")
+   load_six_column_spectrum("my_transmission_file.txt", absorption_format="transmission")
 
 If your file already stores ``1 - exp(-tau)``, use:
 
 .. code-block:: python
 
-   load_six_column_spectrum("my_file.txt", absorption_format="one_minus_exp_tau")
+   load_six_column_spectrum("examples/example_spec.txt", absorption_format="one_minus_exp_tau")

@@ -33,6 +33,10 @@ Core options
    Foreground fraction values tested for WNM components. The default is
    ``[0, 0.5, 1]``.
 
+``max_auto_warm_components``
+   Optional cap for automatically selected WNM components. Leave as ``None``
+   for the full search, or set a small integer for faster examples.
+
 Output options
 --------------
 
@@ -53,15 +57,16 @@ Example
 .. code-block:: python
 
    spec_fit = SpectraDecomposing(x, y, yerr, xemi, yemi, yemi_err)
-   spec_fit.name = "r4"
+   spec_fit.name = "example_spec"
    spec_fit.v_shift = 4
    spec_fit.peak_abs = []
-   spec_fit.peak_emi = [-250, -230]
+   spec_fit.peak_emi = []
+   spec_fit.max_auto_warm_components = 1
    spec_fit.Tsmin = 10
    spec_fit.Tsky = 2.73
    spec_fit.F = [0, 0.5, 1]
    spec_fit.align_data = True
    spec_fit.savecsv = True
    spec_fit.renew = True
-   spec_fit.datapath = "examples/r4_csv_outputs"
+   spec_fit.datapath = "examples/example_spec_csv_outputs"
    spec_fit.fit_and_plot()

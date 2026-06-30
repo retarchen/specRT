@@ -38,17 +38,18 @@ spectra:
 .. code-block:: python
 
    x, y, yerr, xemi, yemi, yemi_err = load_six_column_spectrum(
-       "examples/r4.txt",
-       absorption_format="transmission",
+       "examples/example_spec.txt",
+       absorption_format="one_minus_exp_tau",
    )
 
    fig, axes = create_legacy_axes()
    spec_fit = SpectraDecomposing(x, y, yerr, xemi, yemi, yemi_err)
-   spec_fit.name = "r4"
+   spec_fit.name = "example_spec"
    spec_fit.ax = axes
    spec_fit.align_data = True
    spec_fit.peak_abs = []
-   spec_fit.peak_emi = [-250, -230]
+   spec_fit.peak_emi = []
+   spec_fit.max_auto_warm_components = 1
    spec_fit.Tsmin = 10
    spec_fit.Tsky = 2.73
    spec_fit.fit_mode = "BIC"
@@ -63,7 +64,7 @@ Set ``savecsv=True`` and choose an output directory:
 
    spec_fit.savecsv = True
    spec_fit.renew = True
-   spec_fit.datapath = "examples/r4_csv_outputs"
+   spec_fit.datapath = "examples/example_spec_csv_outputs"
    spec_fit.fit_and_plot()
 
 ``renew=True`` removes old rows for the same source name before appending new
