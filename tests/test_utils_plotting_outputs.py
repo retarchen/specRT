@@ -51,6 +51,39 @@ def test_filter_positive_error_rows_drops_zero_negative_and_nan_errors():
     assert np.allclose(filtered_yerr, [0.1])
 
 
+def test_filter_positive_error_rows_drops_nonfinite_values_and_sorts_velocity():
+    x = np.array([2.0, 0.0, 1.0, np.nan])
+    y = np.array([12.0, 10.0, np.nan, 13.0])
+    yerr = np.full(4, 0.1)
+
+    filtered_x, filtered_y, filtered_yerr = filter_positive_error_rows(x, y, yerr)
+
+    assert np.allclose(filtered_x, [0.0, 2.0])
+    assert np.allclose(filtered_y, [10.0, 12.0])
+    assert np.allclose(filtered_yerr, [0.1, 0.1])
+
+
+def test_filter_positive_error_rows_rejects_duplicate_velocity():
+    with np.testing.assert_raises_regex(ValueError, "unique"):
+        filter_positive_error_rows(
+            np.array([0.0, 1.0, 1.0]),
+            np.array([10.0, 11.0, 12.0]),
+            np.full(3, 0.1),
+        )
+
+
+def test_align_spectra_grids_rejects_nonoverlapping_velocity_ranges():
+    with np.testing.assert_raises_regex(ValueError, "do not overlap"):
+        align_spectra_grids(
+            np.array([0.0, 1.0]),
+            np.array([1.0, 2.0]),
+            np.full(2, 0.1),
+            np.array([2.0, 3.0]),
+            np.array([3.0, 4.0]),
+            np.full(2, 0.1),
+        )
+
+
 def test_align_spectra_grids_uses_overlap_and_shorter_length():
     x = np.array([0.0, 1.0, 2.0, 3.0])
     y = x**2

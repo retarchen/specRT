@@ -233,7 +233,7 @@ class SpectraDecomposing:
         peak_emi=self.peak_emi
         F=self.F
         Tsmin=self.Tsmin
-        v_sh=self.v_shift
+        v_sh=abs(self.v_shift)
         yemi_selferr=yemi-savgol_filter(yemi, window_length=51, polyorder=3)
         #y is 1-e^(-tau)
         
@@ -319,10 +319,11 @@ class SpectraDecomposing:
             lowbound[ncold:_]=Tsmin
             for _ in range(nwarm):
                 lowbound[2*ncold+_*3+1]=xemi.min()
-                ind=np.argmin(np.abs(x - p0[2*ncold+_*3+1]))
-                lowbound[2*ncold+_*3]=np.mean(yemi_err[max(ind-20,0):min(ind+20,len(xemi)-1)])
+                ind=np.argmin(np.abs(xemi - p0[2*ncold+_*3+1]))
+                local_error=np.mean(yemi_err[max(ind-20,0):min(ind+20,len(xemi))])
+                lowbound[2*ncold+_*3]=local_error
                 #lowbound[2*ncold+_*3]=np.max(yemi_err)*0.5
-                p0[2*ncold+_*3]=np.mean(yemi_err[max(ind-20,0):min(ind+20,len(xemi)-1)])*1+1
+                p0[2*ncold+_*3]=local_error+1
                 #p0[2*ncold+_*3]=np.max(yemi_err)*0.5+1
                 #lowbound[2*ncold+_*3]=calculate_noise(yemi,yemi_err,n=3)*2
             highbound=np.array([np.inf for _ in range(len(p0))])
@@ -341,9 +342,20 @@ class SpectraDecomposing:
                     highbound[ncold+_]=Tsmin+100
             for _ in range(nwarm):
                 highbound[2*ncold+_*3+1]=xemi.max()
-                highbound[2*ncold+_*3]=np.max(yemi)+ 3*np.max(yemi_err)
-                highbound[2*ncold+_*3+2]=max(np.ptp(xemi[yemi > 4 * yemi_err]) if np.any(yemi > 4 * yemi_err) else 0,
-                                             self.fwhm_x_range(xemi,yemi))
+                amplitude_index=2*ncold+_*3
+                highbound[amplitude_index]=max(
+                    np.max(yemi)+3*np.max(yemi_err),
+                    lowbound[amplitude_index]+np.finfo(float).eps,
+                )
+                detected_span=np.ptp(xemi[yemi > 4*yemi_err]) if np.any(yemi > 4*yemi_err) else 0.0
+                profile_width=self.fwhm_x_range(xemi,yemi)
+                finite_spacing=np.abs(np.diff(xemi))
+                finite_spacing=finite_spacing[np.isfinite(finite_spacing) & (finite_spacing > 0)]
+                channel_width=np.median(finite_spacing) if finite_spacing.size else 1.0
+                width_candidates=[1.0, channel_width, detected_span, profile_width]
+                highbound[amplitude_index+2]=max(
+                    value for value in width_candidates if np.isfinite(value) and value > 0
+                )
 
             mask = (p0 > highbound) | (p0 < lowbound)
             p0[mask] = (highbound[mask] + lowbound[mask]) / 2
@@ -691,9 +703,9 @@ class SpectraDecomposing:
             #]
             
             modifications = [
-                [p0[i * 3 + 1] - 4, 
-                 p0[i * 3 + 1], 
-                 p0[i * 3 + 1] + 4] for i in range(num)
+                [p0_[i * 3 + 1] - 4,
+                 p0_[i * 3 + 1],
+                 p0_[i * 3 + 1] + 4] for i in range(num)
             ]
             # Generate all combinations of the modified second elements
             all_combinations = list(product(*modifications))

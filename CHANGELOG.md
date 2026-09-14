@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- Correct manual WNM center initialization and emission-grid noise indexing.
+- Keep emission bounds finite for spectra with weak or missing detected peaks.
+- Filter non-finite samples, sort velocity grids, and reject duplicate velocities.
+- Use SciPy's trapezoid integration for compatibility with supported NumPy versions.
+
 ## 1.0.0
 
 - Keep the existing Gaussian absorption and radiative-transfer emission method.

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.integrate import trapezoid
 
 
 def _to_scalar(value):
@@ -177,7 +178,7 @@ def write_table_outputs(
         ((NHI_c / (NHI_c + NHI_w) ** 2 * sigma_NHIw)) ** 2
         + ((NHI_w / (NHI_c + NHI_w) ** 2 * sigma_NHIc)) ** 2
     )
-    NHI_uncorr = K * np.trapezoid(funT, xemi)
+    NHI_uncorr = K * trapezoid(funT, xemi)
     total_NHI_c = NHI_c
     total_sigma_NHIc = sigma_NHIc
     total_NHI_w = NHI_w
